@@ -7,12 +7,15 @@
 package org.datasyslab.geospark.spatialOperator;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 
 import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
 import org.datasyslab.geospark.joinJudgement.GeometryByPolygonJudgement;
 import org.datasyslab.geospark.joinJudgement.GeometryByPolygonJudgementUsingIndex;
@@ -644,5 +647,45 @@ public class JoinQuery implements Serializable{
             });
             return resultCountByKey;
         }
+    }
+
+    public static JavaPairRDD<Envelope, HashSet<Point>> NaiveSpatialJoinQuery(JavaSparkContext sparkContext, RectangleRDD queryWindowRDD, PointRDD objectRDD) {
+        //PointRDD objectRDD = new PointRDD(sparkContext,InputLocation1,carryInputData, "csv","equalgrid",1);
+        //RectangleRDD queryWindowRDD = new RectangleRDD(sparkContext, InputLocation2,0,splitter);
+        // List<Envelope> L = queryWindowRDD.grids;
+        List<Envelope> L = (List<Envelope>)(Object)queryWindowRDD.getRawSpatialRDD().collect();
+        System.out.println(L.size());
+        //List<Object> ListSpatial = new ArrayList();
+        List<Tuple2<Envelope, HashSet<Point>>> ListSpatial = new ArrayList<Tuple2<Envelope, HashSet<Point>>>();
+        for (int i = 0; i < L.size(); i++) {
+            Envelope o = L.get(i);
+            try {
+                List<Point> Spatial;
+                Spatial = RangeQuery.SpatialRangeQuery(objectRDD, o,0,true).collect();
+                Tuple2<Envelope, HashSet<Point>> tuple = new Tuple2<>(o, new HashSet<Point>(Spatial));
+                ListSpatial.add(tuple);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        JavaPairRDD<Envelope, HashSet<Point>> rdd = sparkContext.parallelizePairs(ListSpatial);
+//        JavaPairRDD<Envelope, HashSet<Point>> rdd2 = aggregateJoinResultPointByRectangle(rdd);
+        return rdd;
+    }
+
+    private static JavaPairRDD<Envelope, HashSet<Point>> aggregateJoinResultPointByRectangle(JavaPairRDD<Envelope, HashSet<Point>> joinResultBeforeAggregation) {
+        //AggregateByKey?
+        JavaPairRDD<Envelope, HashSet<Point>> joinResultAfterAggregation = joinResultBeforeAggregation.reduceByKey(new Function2<HashSet<Point>, HashSet<Point>, HashSet<Point>>() {
+            public HashSet<Point> call(HashSet<Point> points, HashSet<Point> points2) throws Exception {
+                points.addAll(points2);
+                return points;
+            }
+        });
+
+        return joinResultAfterAggregation.mapValues(new Function<HashSet<Point>, HashSet<Point>>() {
+            public HashSet<Point> call(HashSet<Point> points) throws Exception {
+                return new HashSet<Point>(points);
+            }
+        });
     }
 }
