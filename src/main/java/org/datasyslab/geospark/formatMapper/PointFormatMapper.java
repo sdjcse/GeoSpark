@@ -58,7 +58,7 @@ public class PointFormatMapper extends FormatMapper implements FlatMapFunction<S
      * @see org.apache.spark.api.java.function.Function#call(java.lang.Object)
      */
     public Iterator call(String line) throws Exception {
-        List result= new ArrayList<Point>();
+        List<Point> result= new ArrayList<Point>();
         Geometry spatialObject = null;
     	MultiPoint multiSpatialObjects = null;
         GeometryFactory fact = new GeometryFactory();
